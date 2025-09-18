@@ -4,17 +4,12 @@ import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
-import path from "path";
-import { fileURLToPath } from "url";
 
 const app = express();
 
 // Configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production-12345';
 const PORT = process.env.PORT || 5000;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Middleware
 app.use(cors({
@@ -51,13 +46,6 @@ let users = [
     tenant: { id: '1', name: 'Acme Corp', slug: 'acme', plan: 'free' }
   },
   {
-    id: '5',
-    email: 'user2@acme.test',
-    password: bcrypt.hashSync('password', 10),
-    role: 'member',
-    tenant: { id: '1', name: 'Acme Corp', slug: 'acme', plan: 'free' }
-  },
-  {
     id: '3',
     email: 'admin@globex.test',
     password: bcrypt.hashSync('password', 10),
@@ -70,16 +58,8 @@ let users = [
     password: bcrypt.hashSync('password', 10),
     role: 'member',
     tenant: { id: '2', name: 'Globex Inc', slug: 'globex', plan: 'free' }
-  },
-  {
-    id: '6',
-    email: 'user2@globex.test',
-    password: bcrypt.hashSync('password', 10),
-    role: 'member',
-    tenant: { id: '2', name: 'Globex Inc', slug: 'globex', plan: 'free' }
   }
 ];
-
 
 let notes = [];
 
@@ -132,9 +112,6 @@ function getTenantPlan(tenantId) {
   return user ? user.tenant.plan : 'free';
 }
 
-// Serve frontend files
-app.use(express.static(path.join(__dirname, "../public")));
-
 // Routes
 
 // Health check
@@ -143,13 +120,37 @@ app.get('/health', (req, res) => {
 });
 
 // Serve frontend for root path
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "../public", "index.html"));
+app.get('/', (req, res) => {
+  res.sendFile(new URL('../public/index.html', import.meta.url).pathname);
 });
 
 // Authentication endpoints
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
 
+    const user = users.find(u => u.email === email);
+    if (!user || !bcrypt.compareSync(password, user.password)) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = generateToken(user);
+    const userResponse = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      tenant: user.tenant
+    };
+
+    res.json({ token, user: userResponse });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 app.get('/auth/me', authenticateToken, (req, res) => {
   const user = users.find(u => u.id === req.user.userId);
